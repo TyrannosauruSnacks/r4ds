@@ -1,0 +1,523 @@
+---
+title: "R for Data Science - 12 Logical Vectors"
+output: html_notebook
+---
+
+```{r}
+# load libraries
+library(tidyverse)
+library(nycflights23)
+```
+
+Make some dummy data
+
+```{r}
+x <- c(1, 2, 4, 5, 7, 11, 13)
+x *2
+```
+
+Mutate in dataframe
+
+```{r}
+df <- tibble(x)
+df |> 
+  mutate(y = x * 2)
+```
+
+## 12.2 Comparisons
+
+`filter()` shows the results, but omits the calculated steps `mutate()` with `.keep = "used"`argument to create df with step results You can `mutate()` first, then `filter()` the variables directly.
+
+```{r}
+
+# Show flights that arrived between 6 and 20 Uhr with < 20 Min. delay
+flights |> 
+  filter(arr_time > 600 & arr_time < 2000 & abs(arr_delay) < 20)
+
+# calculate whether flights arrived in daytime, and whether they had < 20 Min. delay
+# and only show variables relevant to the calculation
+flights |> 
+  mutate(daytime = arr_time > 600 & arr_time < 2000,
+         delaytime = abs(arr_delay) < 20,
+         .keep = "used")
+
+# same calculation as above + filter for those where daytime and delaytime are TRUE
+flights |> 
+  mutate(daytime = arr_time > 600 & arr_time < 2000,
+         delaytime = abs(arr_delay) < 20) |> 
+  filter(daytime & delaytime)
+```
+
+## 12.2.1 Floating point comparisons
+
+Beware of `==`! It checks all the decimal places. Long values however are rounded for visual representation and `==`will show FALSE then. use `dplyr::near()`, to ignore minor differences.
+
+## 12.2.2 Missing Values
+
+NA = contagious
+
+so most calculations with other values will also NA. Even `NA == NA` .
+
+> So stick with `FALSE` for boolean variables.
+
+It’s easiest to understand why this is true if we artificially supply a little more context:
+
+```{r}
+# We don't know how old Mary is
+age_mary <- NA
+
+# We don't know how old John is
+age_john <- NA
+
+# Are Mary and John the same age?
+age_mary == age_john
+
+# We don't know!
+```
+
+Use `is.na()` to actually check for NA
+
+## 12.2.3 `is.na()`
+
+shows TRUE for missing values and FALSE for everything else
+
+```{r}
+flights |> 
+  filter(is.na(dep_time))
+```
+
+## 12.2.4 Exercises
+
+1.  How does `dplyr::near()` work? Type `near` to see the source code. Is `sqrt(2)^2` near 2?
+
+```{r}
+# .Machine$double.eps uses the smallest number possible for the current machine.
+print(.Machine$double.eps)
+# the e-XX stand for *10^-XX, which translates to add XX zeros to the shown number
+# so would be 0.000000000000000220446
+# ´near` takes a slightly higher value by squaring by o.5
+print(.Machine$double.eps^0.5) # is 0.00000001490116
+# so all values that share the first eight digits are considered close enought
+
+```
+
+2.  use `mutate()`, `is.na()`, and `count()` together to describe how the missing values in `dep_time`, `sched_dep_time` and `dep_delay` are connected.
+
+```{r}
+flights |> 
+  mutate(na_dep = is.na(dep_time),
+         na_sched = is.na(sched_dep_time),
+         na_delay = is.na(dep_delay),
+         .keep = "used"
+         )
+
+flights |> 
+  count(is.na(dep_time), is.na(sched_dep_time), is.na(dep_delay))
+# i can see that either flights were scheduled, departed and had a delay
+# or may have had a scheduled departure, but never left, maybe cancelled
+
+# can add cancelled as status
+flights |> 
+  mutate(cancelled = is.na(dep_time & is.na(dep_delay))) |> 
+  count(cancelled)
+
+```
+
+## 12.3 Boolean Algebra
+
+```{r}
+flights |> 
+  filter(dep_delay < 10 & month == 5)
+```
+
+### 12.3.2 Order of operations
+
+```{r}
+flights |> 
+  filter(month == 11 | 12)
+# does not selet November or December.
+# isntead the two number become one argument an the operation reads: November | TRUE
+# which will select all Rows that are 11 and/or not 0, as only 0 is read as FALSE
+# replicate what has happen like so:
+flights |> 
+  mutate(
+    nov = month == 11,
+    final = nov | 12,
+    .keep = "used"
+  )
+# you can see that even if the month is not 11 its still considered true, as it is also not 0
+
+# Put the Boolean opeartor between two functions, to make "November or December" work.
+flights |> 
+  filter( month == 11 | month == 12)
+```
+
+### 12.3.3 `%in%`
+
+use `%in%` with a vektor for less typework. It takes x as logical vector and shows TRUE for every y value that is within x
+
+```{r}
+flights |> 
+  filter(month %in% c(11, 12))
+```
+
+### 12.3.4 Exercises
+
+1.  Find all flights where `arr_delay`is missing but `dep_delay`ist not. Find all flights where neither `arr_time` nor `sched_arr_time` are missing, but `arr_delay` is.
+
+```{r}
+# arr_delay is missing, but dep_delay is not.
+flights |> 
+  filter(is.na(arr_delay) & !is.na(dep_delay))
+
+# neither arr_time nor sched_arr_time missing
+flights |> 
+  filter(xor(!is.na(arr_delay), !is.na(sched_arr_time))) # not correct
+## try something else
+flights |> 
+  filter(!is.na(arr_time) & !is.na(sched_arr_time))
+# forgot the ", but arr_delay is missing"
+flights |> 
+  filter(is.na(arr_delay) & (!is.na(arr_time) & !is.na(sched_arr_time)))
+## check another option
+flights |> 
+  filter(is.na(arr_delay) & !is.na(arr_time) & !is.na(sched_arr_time))
+         
+```
+
+2.  How many flights have missing `dep_time`? What other variables are missing in these rows? What might these rows represent?
+
+```{r}
+flights |> 
+  mutate(mis_dep = is.na(dep_time)) |> 
+  count(mis_dep)
+
+# can also just count the filtered rows
+flights |> 
+  filter(is.na(dep_time)) |> 
+  view()
+# they also have no airtime, so never took off, aka. cancelled flights
+```
+
+3.  Assuming that a missing `dep_time` implies that a flight is cancelled, look at the number of cancelled flights per day. Is there a pattern? Is there a connection between the proportion of cancelled flights and the average delay of non-cancelled flights?
+
+```{r}
+# cancelled flights per day
+flights |> 
+  group_by(day) |> 
+  filter(is.na(dep_time)) |> 
+  count(day)
+# visualize
+flights |> 
+  group_by(day) |> 
+  filter(is.na(dep_time)) |> 
+  count(day) |> 
+  ggplot(aes(day, n))+
+  geom_point()+
+  geom_smooth()
+# late start, middle and early end of month are lots of cancelled flights 
+# day of week might be more interesting
+
+# connection between proportion of cancelled flights and average delay of non-cancelled flights
+## how many flights are cancelled each month?
+flights |>
+  filter(is.na(dep_delay)) |> 
+  group_by(day) |>
+  summarize(n())
+
+# find median delay per day
+flights |>
+  group_by(day) |> 
+  summarise(m_delay = median(dep_delay, na.rm = TRUE),
+            n())
+
+#need to add the cancelled proportion as variable
+flights |> 
+  mutate(cancelled = is.na(dep_delay)) |> 
+  group_by(day) |>
+  summarise(cancelled = mean(is.na(arr_delay)),
+            mean_delay = mean(arr_delay, na.rm = TRUE))
+# the mean in summarize counts for each day. so that gives you the proportion in that. Don't have to add it as extra variable
+
+#visualize
+flights |> 
+  mutate(cancelled = is.na(dep_delay)) |> 
+  group_by(day) |>
+  summarise(cancelled = mean(is.na(arr_delay)),
+            mean_delay = mean(arr_delay, na.rm = TRUE)) |> 
+  ggplot(aes(cancelled, mean_delay)) +
+  geom_point() +
+  geom_smooth()
+# switch axis
+flights |> 
+  mutate(cancelled = is.na(dep_delay)) |> 
+  group_by(day) |>
+  summarise(cancelled = mean(is.na(arr_delay)),
+            mean_delay = mean(arr_delay, na.rm = TRUE)) |> 
+  ggplot(aes(mean_delay, cancelled)) +
+  geom_point() +
+  geom_smooth()
+## the more delay on average, the more flights cancelled
+  
+
+  
+
+
+  
+  
+  
+```
+
+## 12.4 Summaries
+
+`any()` and `all()` give TRUE or FALSE when either any or all of the vectors values match the defined function. `mean()` and `sum()` are more elaborate, as `mean()` shows the proportion of `TRUE` and `FALSE` values and `sum()` gives a count of `TRUE`.
+
+### 12.4.3 Logical subsetting
+
+`[` to filter within operation instead of the whole dataframe.
+
+### 12.4.4 Exercises
+
+1.  What will `sum(is.na(x))` tell you? How about `mean(is.na(x))`?
+
+`sum(is.na(x))` will tell me the number of missing values in column `x`. `mean(is.na(x))` will give me the proportion of missing to existing values for column `x`.
+
+```{r}
+flights |> 
+  group_by(year, month, day) |> 
+  summarize(
+    delayed_NA = sum(is.na(dep_delay)),
+    delayed_prop_NA = mean(is.na(dep_delay)),
+    .groups = "drop"
+  )
+```
+
+2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return when applied to a logical vector? What logical summary function is it equivalent to? Read the documentation and perform a few experiments.
+
+```{r}
+# prod
+## is.na 
+flights |> 
+  group_by(year, month, day) |> 
+  summarize(prod(is.na(dep_delay)),
+            .groups = "drop")
+
+# any in dep_delay
+flights |> 
+  group_by(year, month, day) |> 
+  summarize(prod(dep_delay, na.rm = TRUE),
+            .groups = "drop")
+
+# what does prod() do with TRUE and FALSE
+prod(TRUE, FALSE)
+prod(TRUE, TRUE)
+prod(FALSE, FALSE)
+prod(NA, TRUE)
+prod(NA, FALSE)
+prod(TRUE, FALSE, FALSE)
+## so it reads TRUE as 1 and FALSE as 0, multiplies it. Basically like an all() query
+```
+
+```{r}
+#min
+## test with true and false
+min(TRUE, FALSE)
+min(TRUE, TRUE)
+min(FALSE, FALSE)
+min(TRUE, NA)
+min(FALSE, NA)
+
+min(1, 2, 3)
+min(2, 3, 4)
+min(5:100)
+## so min() reads als numbers and prints the lowest it finds. FALSE and TRUE read 0 and 1. So it's the same as prod() for logical vectors. All have to be true to give you a 1. If any are FALSE or NA you get the 0 or NA.
+```
+
+## 12.5 Conditional transformations
+
+to one thing for condition x and another thing for condition y
+
+### 12.5.1 `if_else()`
+
+```{r}
+x <- c(-3:3, NA)
+if_else(x > 0, "+ve", "-ve")
+```
+
+fourth argument is for what to do with missing (NA)
+
+```{r}
+x <- c(-3:3, NA)
+if_else(x > 0, "+ve", "-ve", "???")
+```
+
+### 12.5.2 `case_when()`
+
+`condition ~ output` is the syntax of it. makes some things easier to write.
+
+Is more code to write, but more as you would speak/think.
+
+### 12.5.4 Exercises
+
+1.  A number is even if it\`s divisible by two, which in R you can find out with `x %% 2 == 0`. Use this fact and `if_else()` to determine whether each number between 0 and 20 is even or odd.
+
+```{r}
+x <- c(0:20)
+
+if_else(x %% 2 == 0, TRUE, FALSE)
+# make tibble
+df <- tibble(x)
+
+df |> mutate(
+  Even = if_else(x %% 2 == 0, "EVEN", "ODD")
+)
+```
+
+2.  Given a vector of days like `x <- c("Monday", "Saturday", "Wednesday")`, use an `if_else()` statement to label them as weekends or weekdays.
+
+```{r}
+x <- c("Monday", "Saturday", "Wednesday")
+
+# straight forward way
+if_else(x == "Monday" | x == "Wednesday", "Weekday", "Weekend")
+
+# more compact
+if_else(x %in% c("Monday", "Wednesday"), "Weekday", "Weekend")
+
+# write tibble
+tibble(Name = x,
+       Type = if_else(x %in% c("Monday", "Wednesday"), "Weekday", "Weekend")
+       )
+```
+
+3.  Use `if_else()` to compute the absolute value of a numeric vector called `x`.
+
+```{r}
+# absolute means no negative values
+# create vector with negative values
+x <- (-10:10)
+
+# negative numbers become positive if multiplied by -1
+-10 * -1
+
+# so function is "if negative multiply by -1 if else just print"
+if_else(x < 0, x*-1, x)
+
+## more simple is to just add a '-' in the calculation
+if_else(x < 0, -x, x)
+```
+
+4.  Write a `case_when()` statement that uses the `month` and `day` columns from `flights` to label a selection of important US holidays (e.g., New Years Day, 4th of July, Thanksgiving, and Christmas). First create a logical column that is either `TRUE` or `FALSE`, and then create a character column that either gives the name of the holiday or is `NA`.
+
+```{r}
+# Holyday Dates
+holidays <- tibble(
+  name = c("New Years Day", "4th of July", "Thanksgiving", "Christmas"),
+  day = c(1, 4, 28, 24),
+  month = c(1, 7, 11, 12)
+  )
+
+# make logical column
+
+flights |> 
+  mutate(
+    holiday = case_when(
+      day %in% c(1, 4, 28, 24) & month %in% c(1, 7, 11, 12) ~ TRUE,
+      .default = FALSE)
+  ) |> select(month, day, holiday) |> filter(holiday = TRUE)
+# yeah now all days are true
+# try simple first
+
+flights |> 
+  mutate(
+    holiday = case_when(
+      day == 1 ~ TRUE,
+      .default = FALSE
+    )
+  ) |> filter(holiday = TRUE)
+
+# try if_else
+flights |> 
+  mutate(
+    holiday = if_else(
+      day == 1, TRUE, FALSE
+    )
+  ) |> 
+  filter(holiday = FALSE)
+
+# my bad filter needs the '==' to filter for the argument
+#so back to the first code but with correct filter
+flights |> 
+  mutate(
+    holiday = case_when(
+      day %in% c(1, 4, 28, 24) & month %in% c(1, 7, 11, 12) ~ TRUE,
+      .default = FALSE)
+  ) |> 
+  select(month, day, holiday) |> 
+  filter(holiday == TRUE)
+
+# that worked, now check of the correct combinations were filtered
+flights |> 
+  mutate(
+    holiday = case_when(
+      day %in% c(1, 4, 28, 24) & month %in% c(1, 7, 11, 12) ~ TRUE,
+      .default = FALSE)
+  ) |> 
+  select(month, day, holiday) |> 
+  filter(month == 1, day == 4)
+
+# yeah, so all combinations get a true, not the specific
+# try more specific 
+flights |> 
+  mutate(
+    holiday = case_when(
+      (month == 1 & day == 1) | (month == 7 & day == 4) |(month == 11 & day == 28) | (month == 12 & day == 24) ~ TRUE,
+      .default = FALSE
+      )
+    )|> filter(day == 1, month == 2) |> select(holiday)
+# that worked, quite complicated though
+
+# add hoilday name
+flights |> 
+  mutate(
+    holiday = case_when(
+      (month == 1 & day == 1) | (month == 7 & day == 4) |(month == 11 & day == 28) | (month == 12 & day == 24) ~ TRUE,
+      .default = FALSE
+      ),
+    holiday_name = case_when(
+      month == 1 & day == 1 ~ "New Years Day",
+      month == 7 & day == 4 ~ "4th of July",
+      month == 11 & day == 28 ~ "Thanksgiving",
+      month == 12 & day == 24 ~ "Christmas"
+      )
+    ) |>
+  group_by(holiday_name) |>
+  summarise(
+    mean(day),
+    mean(month)
+    )
+
+# ugly code, clean it
+flights |> 
+  mutate(
+    is_holiday = case_when(
+      month == 1 & day == 1 ~ TRUE, #   New Years Day
+      month == 7 & day == 4 ~ TRUE, #   4th of July
+      month == 11 & day == 28 ~ TRUE, # Thanksgiving
+      month == 12 & day == 24 ~ TRUE, # Christmas
+      .default = FALSE #                 not a holiday
+      ),
+    holiday_name = case_when(
+      month == 1 & day == 1 ~ "New Years Day",
+      month == 7 & day == 4 ~ "4th of July",
+      month == 11 & day == 28 ~ "Thanksgiving",
+      month == 12 & day == 24 ~ "Christmas"
+      )
+    ) |>
+  group_by(holiday_name, is_holiday) |>
+  summarise(
+    mean(day),
+    mean(month)
+    )
+# noice!
+```

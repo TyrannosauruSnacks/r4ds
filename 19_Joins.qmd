@@ -1,0 +1,710 @@
+---
+title: "19 Joins"
+author: "Max Hachemeister"
+format: html
+theme: materia
+---
+
+## Prerequisites
+
+[Chapter in the book](https://r4ds.hadley.nz/joins.html#introduction)
+
+```{r}
+#| label: setup
+#| output: false
+
+library(tidyverse)
+library(nycflights13)
+library(Lahman)
+theme_set(theme_light())
+```
+
+## 19.1 Introduction
+
+Mutating Joins
+
+:   add new variables to one data frame from matching observations in another
+
+Filtering Joins
+
+:   filter observations from one data frame based on whether or not they match an observation in another
+
+## 19.2 Keys
+
+### 19.2.2 Checking primary keys
+
+A column that I want to use as a primary key has to have "distinc" values, which means there shoud be no value occuring more than once. I can check this by counting the values an then filter for \> 1. "0" as a result confirms the distinctness of the values.
+
+```{r}
+# this is fine
+planes |> 
+  count(tailnum) |> 
+  filter(n > 1)
+
+# here are no unique values
+planes |> 
+  count(year) |> 
+  filter(n > 1)
+
+# this test works aswell with "compound-keys"
+# time_hour is not unique
+weather |> 
+  count(time_hour) |> 
+  filter(n > 1)
+
+# but together with "origin" it's fine
+weather |> 
+  count(time_hour, origin) |> 
+  filter(n > 1)
+  
+```
+
+
+You should also check for missing data (NAs).
+Here also "0" results are OK.
+
+```{r}
+# this for planes again
+planes |> 
+  filter(is.na(tailnum))
+
+# and here for compound keys
+weather |> 
+  filter(is.na(time_hour) | is.na(origin))
+```
+
+### 19.2.3 Surrogate Keys
+
+Even though you as a expert for your data know which columns identify a single observation, it's sometimes better for communications sake to create a surrogate Key. This is usually just an "id" column.
+
+```{r}
+# you can identifiy flights with a compound key
+flights |> 
+  count(time_hour, carrier, flight) |> 
+  filter(n > 1)
+
+# but this "adress" is hard to put in words
+# so you can add an "id" column
+flights |> 
+  mutate(id = row_number(),
+         # place it before the first column of the dataframe
+         .before = 1)
+```
+
+### 19.2.4 Exercises
+
+#### 19.2.4.1
+
+> We forgot to draw the relationship between `weather` and `airports` in Figure 19.1. What is the relationship and how should it appear in the diagram?
+
+```{r}
+# show weather an airports
+glimpse(weather)
+glimpse(airports)
+```
+
+This looks like `origin` and `faa` are the foreign keys in both dataframes.
+
+```{r}
+# check distinctness of aiport primary key
+airports |> 
+  count(faa) |> 
+  filter(n > 1)
+```
+
+Yeah so the matching keys are `weather$origin` and `airports$faa`.
+
+I guess because for joining you probably just need one side to be unique.
+
+#### 19.2.4.2
+
+> `weather` only contains information for the three origin airports in NYC. If it contained weather records for all airports in the USA, what additional connection would it make to `flights`?
+
+```{r}
+# check which columns the flights has
+glimpse(flights)
+```
+
+Having all airports of the USA in `weather` would connect to the `destination` as well as the `origin` column from `flights`.
+
+So there would be two foreign keys. I could get the weather for both destination and origin.
+
+#### 19.2.4.3
+
+> The year, month, day, hour, and origin variables almost form a compound key for weather, but there’s one hour that has duplicate observations. Can you figure out what’s special about that hour?
+
+```{r}
+# find the duplicate hour
+weather |> 
+  count(
+    year,
+    month,
+    day,
+    hour,
+    origin
+    ) |> 
+  filter(n > 1)
+
+## ah i should check nycflights13 for this probably
+nycflights13::weather |> 
+  count(
+    year,
+    month,
+    day,
+    hour,
+    origin
+    ) |> 
+  filter(n > 1)
+```
+
+2013-11-03, Hour 1 seems to have double entries.
+Let's check the whole dataframe for those rows.
+
+```{r}
+nycflights13::weather |> 
+  filter(year == 2013,
+         month == 11,
+         day == 3)
+```
+
+Ah interesting, the hours are the same, but the other columns have different values. My guess is, that this is an error and one of the hours is supposed to be "0".
+
+There should be 24 hours. Let's count them.
+
+```{r}
+nycflights13::weather |>
+  filter(year == 2013, month == 11, day == 3) |> 
+  count(hour)
+```
+
+Yeah It's just 23 rows. Let's compare it to another day.
+
+```{r}
+nycflights13::weather |> 
+  filter(year == 2013, month == 11, day %in% c(2,3)) |> 
+  group_by(day) |> 
+  summarise(n_distinct(hour))
+```
+
+Holymoly, there are even less distinct hours the day before?
+
+```{r}
+nycflights13::weather |> 
+  filter(year == 2013, month == 11, day == 2) |> 
+  count(hour)
+```
+
+Yes, for day 2 seem to be less records in general. However this one has an hour "0".
+
+So two times the hour "1" seems to be an irregularity.
+
+#### 19.2.4.4
+
+> We know that some days of the year are special and fewer people than usual fly on them (e.g., Christmas eve and Christmas day). How might you represent that data as a data frame? What would be the primary key? How would it connect to the existing data frames?
+
+I would create a `special_days` dataframe.
+
+This would have the columns:
+
+-   `id`
+    -   maybe as a surrogate key
+-   `month`
+-   `day`
+-   `name`
+    -   the name of the occasion
+    -   primary key
+-   `national_dayoff`
+    -   logical, whether it's a day off in all of USA
+
+#### 19.2.4.4
+
+> Draw a diagram illustrating the connections between the Batting, People, and Salaries data frames in the Lahman package.
+
+```{r}
+glimpse(People)
+glimpse(Batting)
+glimpse(Salaries)
+```
+
+Okay so it looks like this
+
+-   People \< playerID \> Batting
+-   Batting \< yearID, teamID, playerID \> Salaries
+-   Salaries \< playerID \> People
+
+> Draw another diagram that shows the relationship between People, Managers, AwardsManagers.
+
+```{r}
+glimpse(People)
+glimpse(Managers)
+glimpse(AwardsManagers)
+```
+
+The diagramm looks like this
+
+-   People \< playerID \> Managers
+-   Managers \< playerID, yearID \> AwardsManagers
+-   AwardsManagers \< playerID \> People
+
+> How would you characterize the relationship between the Batting, Pitching, and Fielding data frames?
+
+```{r}
+glimpse(Batting)
+glimpse(Pitching)
+glimpse(Fielding)
+```
+
+It looks like they could've been all in one dataframe, maybe called `scoring`, with an extra column `type`. But I guess then the dataframe would be quite large with all those added rows into one. And maybe you'd filter that in the end anyways. I think this was a practical decision to split those up, even though that created some redundant data with at least the first rows till `lgID`
+
+## 19.3 Basic joins
+
+### 19.3.1 Mutating joins
+
+mutating join
+
+:   combines variable from two dataframes by first matching observations by key an then copying the variable from one dataframe to another
+
+Create a smaller dataset to better see the effect of joins
+
+```{r}
+flights2 <- 
+  flights |> 
+  select(year, time_hour, origin, dest, tailnum, carrier)
+flights2
+```
+
+Check out the `left_join()`. This one adds additional columns to all rows of the left (x) dataframe for which it can match the key on the right (y) dataframe. The rows of the left dataframe will not change, even if some can't be matched.
+
+```{r}
+flights2 |> 
+  left_join(airlines)
+
+# check whether some were missing
+flights2 |> 
+  left_join(airlines) |> 
+  filter(is.na(name))
+
+```
+
+In this case all rows had a match, nice! Here is an example where not all rows are matched.
+
+```{r}
+flights2 |> 
+  # take the planes dataframe, but select some columns for overview
+  left_join(planes |> select(tailnum, type, engines, seats)) |> 
+  filter(is.na(engines))
+```
+
+Oh there are actually quite a few missing rows. How many tailnumbers (indivdual airplanes) are that?
+
+```{r}
+flights2 |> 
+  # take the planes dataframe, but select some columns for overview
+  left_join(planes |> select(tailnum, type, engines, seats)) |> 
+  filter(is.na(engines)) |> 
+  summarise(n_distinct(tailnum))
+```
+
+### 19.3.2 Specifying join keys
+
+natural join
+
+:   join by all keys found in both dataframes
+
+The *natural join* is the sensible default for all the join functions. But in some cases the columns might refer to different things like `year` could mean year of production in one dataframe and year of observation in another. Then data would be mismatched. Therefore it is good practice to explicitly define the keys with the argument `join_by()`.
+
+Check this out, here we get even more missing matches as before.
+
+```{r}
+flights2 |> 
+  left_join(planes) |> 
+  filter(is.na(type))
+```
+
+Basically all, because the function might find the `tailnum` but the `year` does not match, as most of the planes were build before the year 2023. Therefore we need to define `tailnum` as only key.
+
+```{r}
+flights2 |> 
+  left_join(planes, join_by(tailnum)) |> 
+  filter(is.na(type))
+```
+
+Now we are just missing the ones, that seem to be missing anyways. Observe, that now there are two `year` columns with a suffix (`year.x`, `year.y`)
+
+
+equi join
+: the keys (the values in the key column) in the two dataframes must be equal, hence each row is matched with exactly one other row with the matching key
+
+This is the default for the join function.
+For example `join_by(x)` is a short form of `join_by(x == x)`.
+This comes in handy, when the key columns have different names in each dataframe, as it is the case in `flights2` and `airport`.
+```{r}
+# here you could either get the rows for the destination airports
+flights2 |> 
+  left_join(airports,
+            join_by(dest == faa))
+
+# or for those of the origin aiports
+flights |> 
+  left_join(airports,
+            join_by(origin == faa))
+```
+
+There is also an older variant of defining the keys in `join_by()`, which is by character vector:
+
+-   `by = "x"` is the same as `join_by(x)`
+-   `by = c("a" = "x")` is the same as `join_by(a == x)`
+
+So the following two codes deliver the same results.
+
+```{r}
+flights2 |> 
+  left_join(airports,
+            by = c("origin" = "faa"))
+
+flights2 |> 
+  left_join(airports,
+            join_by(origin == faa))
+
+# and just to complete the confusion, this one works as well
+flights2 |> 
+  left_join(airports,
+            by = join_by(origin == faa))
+```
+Anyways `join_by()` is more versatile and easy to write, so I'll try to remember this as my default way for defining the keys in a join.
+
+Once you got the hang of the mechanics of `left_join()`, you will also have an intuition for the other *mutating joins*, which are `inner_join()`, `right_join()` and `full_join()`.
+
+
+### 19.3.3 Filtering joins
+
+Filtering joins
+: match the keys and filter the results to either only the matching rows (*semi join*) or only those without a match (*anti join*)
+
+For example we could use `semi_join()` to only get the info about the airports that are in `flights2$origin`.
+```{r}
+airports |> 
+  semi_join(flights2,
+            join_by(faa == origin))
+```
+
+Or just the destinations.
+```{r}
+airports |> 
+  semi_join(flights2,
+            join_by(faa == dest))
+```
+
+On the other hand we could use `anti_join()` to find rows for which Infos are missing in an other dataframe.
+
+Let's check, which `flights` have a destination that are not in `airports`
+```{r}
+flights |> 
+  anti_join(airports,
+            join_by(dest == faa)) |> 
+  # show each individual value just once   
+  distinct(dest)
+```
+
+Or we can find which airplanes from `flights2` are missing in `planes`, by using the `tailnum` column.
+```{r}
+flights2 |> 
+  anti_join(planes,
+            join_by(tailnum)) |> 
+  distinct(tailnum)
+```
+
+This is good for debugging, which in this case would be to find those rows that are implicitly missing. These are rows that by themselfes have no missing values, but will in the joined dataframe. So you can inform your decision whether to keep them.
+
+### 19.3.4 Exercises
+
+# 1
+> Find the 48 hours (over the course of the whole year) that have the worst delays. Cross-reference it with the `weather`data. Can you see any patterns?
+
+```{r}
+flights |> 
+  # get the 48 rows with the most arrival delay
+  slice_max(arr_delay,
+            n = 48) |>
+  # join the weather data
+  left_join(weather,
+            join_by(time_hour))
+```
+
+Ah okay, `time_hour` is not a sufficient key. I'm getting three times the rows I'm putting in. Yeah, because the weather is for three airports, there are three different entries for each hour. So I should also add `origin` as key.
+```{r}
+flights |> 
+  slice_max(arr_delay,
+            n = 48) |> 
+  left_join(weather,
+            join_by(time_hour,
+                    origin)) |> 
+  # plot arr_delay and wind_speed, and throw visib in the mix
+  ggplot(aes(wind_speed, arr_delay)) + 
+  geom_point(aes(color = visib))
+```
+Looks a bit like `wind_speed` could be somewhat correlated with `arr_delay`, however there are also observations with a lot delay and not much wind, as well as the other way around.
+
+`visib` doesn't seem too indicative for delay.
+
+Let's check `wind_dir` aswell.
+```{r}
+flights |> 
+  slice_max(arr_delay,
+            n = 48) |> 
+  left_join(weather,
+            join_by(time_hour,
+                    origin)) |> 
+  # plot arr_delay and wind_speed, and throw visib in the mix
+  ggplot(aes(wind_dir, arr_delay)) + 
+  geom_point()
+```
+Ah well, that's an even more random pattern.
+
+I think the next best thing would be to compare all the `weather` variables with each other, either in one single plot as different groups, or in a facet wrap. But I guess that's not the task for now, so I'll move on from here.
+
+#### 2
+
+> Imagine you've found the top 10 most popular destinations using this code:
+```{r}
+top_dest <- flights2 |>
+  count(dest, sort = TRUE) |>
+  head(10)
+```
+> How can you find all flights to those destinations?
+
+As I just want flights that match these top 10 destinations, I would use a *filtering join*, whose function is `semi_join()`
+```{r}
+# top 10 destinations
+top_dest <-
+    flights2 |>
+      count(dest, sort = TRUE) |>
+      head(10)
+
+# all the flights with those top 10 destinations
+top_flights <- 
+  flights |> 
+    semi_join(top_dest,
+              join_by(dest))
+
+# check whether it's still 10 distinct destinations
+top_flights |> 
+  distinct(dest) |> 
+  nrow()
+```
+
+#### 3
+> Does every departing flight have correponding weather data for that hour?
+
+I assume, that most of the flights have weather data, so I will instead try to find those that don't.
+
+This is also a *filtering join*, this time the funtion `anti_join()`.
+And remember that this is a compound join by `time_hour` and `origin`
+```{r}
+na_weather <- 
+  flights |> 
+    anti_join(weather,
+              join_by(time_hour,
+                      origin))
+
+# check which dates these are in particular
+na_weather |> 
+  distinct(time_hour)
+
+```
+There are at least 48 date_times for which no observations exist in `weather`
+
+#### 4
+> What do the tail numbers that don't have a matching record in `planes` have in common? (Hint: one variable explains ~90% of the problems.)
+
+Let's find the tail numbers for which `planes` records are missing.
+
+This is also done by `anti_join()`
+```{r}
+na_planes <- 
+flights |> 
+  anti_join(planes,
+            join_by(tailnum))
+
+na_planes |> 
+  distinct(tailnum,
+           .keep_all = TRUE)
+```
+
+After checking the documentation for `planes`, I think it's mostly the two airlines **AA** and **MQ** causing the missing data.
+
+Let's confirm real quick:
+```{r}
+na_planes |> 
+  distinct(tailnum,
+           .keep_all = TRUE) |>
+  # take the column `carrier`, fill colors accordingly
+  ggplot(aes(carrier, fill = carrier)) + 
+  # make a bar plot for the # rows of each `carrier`
+  geom_bar() +
+  # explain y axis 
+  ylab("# planes without data")
+```
+
+#### 5
+> Add a column to `planes` that lists every `carrier` that has flown that plane. You might expect that there’s an implicit relationship between plane and airline, because each plane is flown by a single airline. Confirm or reject this hypothesis using the tools you’ve learned in previous chapters.
+
+Add the column to planes and see what happens.
+Maybe check the dataframes real quick.
+```{r}
+#| error: true
+
+glimpse(planes)
+glimpse(carrier)
+```
+Aha, `carrier` is just a column from `flights`.
+
+So I will join `planes` with `flights`, by the key `tailnum`:
+```{r}
+planes_carrier <- 
+  planes |> 
+    left_join(flights,
+              join_by(tailnum))
+```
+
+Good, now I should check whether individual planes were flown by one or more carriers.
+```{r}
+planes_carrier |> 
+  group_by(tailnum) |> 
+  summarize(n = n_distinct(carrier)) |> 
+  filter(n > 1)
+```
+
+Okay this was the way I would do It, but I didn't really use the tools presented in this chapter much and I also could've done this within `flights` only, so I will try it another way.
+
+I assume that I'm supposed to *filter join* the `carrier` info to `planes`:
+```{r}
+planes |> 
+  semi_join(flights |>  select(tailnum, carrier),
+            join_by(tailnum)
+            )
+```
+
+No, I forgot!
+
+*Filter joins* do not add new columns.
+
+Back to *mutating joins*, because I want to add the `carrier` column. But this time I will reduce the `flights` to distinct rows first:
+```{r}
+planes |> 
+  left_join(flights |> distinct(tailnum, carrier),
+            join_by(tailnum)) |> 
+  # check whether both dataframes have the same number of rows
+  # if they differ, then planes are not flown by only one Airline 
+  nrow() == nrow(planes)
+```
+
+Not all planes are flown by just a single airline.
+
+#### 6
+> Add the latitude and the longitude of the origin *and* destination airport to `flights`. Is it easier to rename the columns before or after the join?
+
+Adding latitude and longitude and renaming after the join:
+```{r}
+flights |> 
+  # just select the rows of interest, which are also the keys
+  select(origin, dest) |> 
+  # gotta do this in two steps
+  # origin first
+  left_join(airports |> select(faa, lat, lon),
+            join_by(origin == faa)) |> 
+  # now dest
+  left_join(airports |> select(faa, lat, lon),
+            join_by(dest == faa)) |> 
+  # rename columns
+  rename(
+    lat_origin = lat.x,
+    lon_origin = lon.x,
+    lat_dest = lat.y,
+    lon_dest = lon.y
+  )
+```
+
+Okay, let's see how many lines this will be with renaming before the join:
+```{r}
+flights |> 
+  select(origin, dest) |> 
+  # I don't need to rename yet, because the new columns are not colliding
+  left_join(airports |> select(faa, lat, lon),
+            join_by(origin == faa)) |> 
+  # now I can use the `suffix` argument
+  left_join(airports |> select(faa, lat, lon),
+            join_by(dest == faa),
+            suffix = c("_origin", "_dest"))
+```
+
+Yeah, just have to write a lot less code, when renaming "while" joining.
+
+#### 7
+> Compute the average delay by destination, then join on the `airports`data frame so you can show the spatial distribution of delays. Here's an easy way to draw a map of the United States:
+```{r}
+airports |>
+  semi_join(flights, join_by(faa == dest)) |>
+  ggplot(aes(x = lon, y = lat)) +
+    borders("state") +
+    geom_point() +
+    coord_quickmap()
+```
+
+> You might want to use the `size` or `color` of the points to display the average delay for each airport
+
+Compute the average delay by destination:
+```{r}
+mean_dest_delay <- 
+flights |> 
+  group_by(dest) |> 
+  summarise(mean_delay = mean(arr_delay, na.rm = TRUE))
+```
+
+Join and draw a map:
+```{r}
+mean_dest_delay |>
+  left_join(airports |> select(faa, lat, lon),
+            join_by(dest == faa)) |> 
+  # add color as indicator for delay
+  ggplot(aes(x = lon, y = lat)) +
+  borders("state") +
+  geom_point(aes(color = mean_delay)) +
+  coord_quickmap()
+```
+
+#### 8
+> What happened on 2013-06-13? Draw a map of the delays, and then use Google to cross-reference with the weather.
+
+Filter flights that had that date:
+```{r}
+flights_date <- 
+  flights |> 
+    filter(year == 2013,
+           month == 06,
+           day == 13)
+```
+
+Now I should draw a map, for the delay, so I'd get the mean delay per destination airport before drawing the map:
+```{r}
+flights_date |>
+  # get mean arr_delay per dest
+  group_by(dest) |> 
+  summarise(mean_delay = mean(arr_delay, na.rm = TRUE)) |> 
+  # get lan and lot from `airports`
+  left_join(airports |> select(faa, lat, lon),
+            join_by(dest == faa)) |> 
+  # draw map
+  ggplot(aes(x = lon, y = lat)) +
+    borders("state") +
+    geom_point(aes(color = mean_delay)) +
+    coord_quickmap()
+```
+
+There seems to be a lot delay in eastern central america.
+Now I will ask google what was up there.
+
+There were severe storms starting in Atlanta going south-east.
+[This is the report I found](https://stormwatchamerica.wordpress.com/2013/06/13/developing-severe-storms-likely-thursday-in-metro-atlanta-all-of-n-c-ga-gawx/)
+
+After closer inspection, there is also a spot wit a lot of delay in boston, so I also checked that and found [another news report](https://eu.usatoday.com/story/todayinthesky/2013/06/13/severe-storms-snarl-flights-across-the-east/2418761/) showing the extent of the storm.

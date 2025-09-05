@@ -1,0 +1,382 @@
+---
+title: "15 Regular expressions"
+output: html_notebook
+---
+# 15.1.1 Prerequisites
+```{r}
+library(tidyverse)
+library(babynames)
+```
+
+# 15.2 Pattern basics
+`str_view()` can look up and mark the string you're searching
+```{r}
+# show me all the values with berry in the string from the vector containing fruitnames 
+str_view(fruit, "berry")
+```
+Numbers and letters are *literal* characters, other characters like `.`, `+` are called *metacharacters*.
+So the `.` in a `str_view()` query works like an *any single*. So each `.` is exactly one any letter
+```{r}
+# . will match *any* char
+# show all the values that have an "a" follwed by something.
+str_view(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
+```
+For example:
+from the vector *fruit*, find my all the values that have an *a* followed by *any three letters* and an *e*
+```{r}
+str_view(fruit, "a...e")
+```
+Interesting, yeah spaces are characters as well.
+
+**Quantifiers** to control the count/pattern of your query beyond `.`
+```{r}
+test_string <- c("a", "ab", "abb")
+
+# show single "a"s and/or "a"s followed by an "b"
+str_view(test_string, "ab?")
+
+# show all "a"s followed by at least one "b"
+str_view(test_string, "ab+")
+
+# show all "a"s followed by any number of "b"s
+# compare this one to the "+"-quantifier
+str_view(test_string, "ab*")
+```
+**Character classes**
+use characters within `[]` to give a set for the query to match with. Use `^` as `!` is used in other querys, as *NOT*.
+
+```{r}
+# from the words vector, show all the values that have an x between vowels.
+str_view(words, "[aeiou]x[aeiou]")
+
+# from the words vector, show all the values that have an y without vowels around it, aka. only between consonants
+str_view(words, "[^aeiou]y[^aeiou]")
+```
+**Alternation**
+use `|` to give a set of patterns to choose from, so in a way one branch up from `[]`
+```{r}
+# from the fruit vector, show all the values that matches any of the set "apple", "melon", "nut"
+str_view(fruit, "apple|melon|nut")
+
+# from the fruit vector, show all values with double vowels
+str_view(fruit, "aa|ee|ii|oo|uu")
+```
+## 15.3 Key functions
+### 15.3.1 Detect matches
+`str_detect()` gives logical vector for pattern match
+```{r}
+# of the given vector, do the values match any vowel
+str_detect(c("a", "b", "c"), "[aeiou]")
+```
+Works well with `filter()`
+```{r}
+# from the babynames df, find all the rows that have an "x" in the "name" column and count those with the same value.
+babynames |> 
+  # filter all the rows that are TRUE for "any x in string"
+  filter(str_detect(name, "x")) |> 
+  # sum up the n values of the rows with the same string and sort ascending
+  count(name, wt = n, sort = TRUE )
+```
+`str_detect()` also works within `summarize()`.
+So with argument `sum()` calculate sum/count/n of observations that match the string query, or compute proportion with `mean()`
+```{r}
+# from dataframe babynames, sum the values that contain a "x" by year
+babynames |> 
+  group_by(year) |> 
+  summarize(sum_x = sum(str_detect(name, "x")))
+# in this case we know how many different names with x there are for each year, as repetitions of each name are combined in the "n" column
+
+# from dataframe babynames, compute the proportion of values that contain a y, by year
+babynames |> 
+  group_by(year) |> 
+  summarize(proportion = mean(str_detect(name, "y")))
+
+# lets plot this one
+babynames |> 
+  group_by(year) |> 
+  summarize(proportion = mean(str_detect(name, "y"))) |> 
+  ggplot(aes(year, proportion)) +
+  geom_line()
+# proportion is sensible in this case, as it respects the yearly variation of total sample size
+
+```
+`str_subset()`and `str_which()` are related to `str_detect()
+
+```{r}
+# create test vector
+test_string <- c("a", "ab", "abb")
+
+# str_detect gives logical vector
+str_detect(test_string, "a.")
+
+# str_subset copies the whole sting with matching conditions, aka character vektor
+str_subset(test_string, "a.")
+
+# str_which returns the positions(rows) of matches, aka integer vector of position
+str_which(test_string, "a.")
+
+# str_view for completion filters and marks matching values
+str_view(test_string, "a.")
+
+# make table for comparison
+tibble(raw = test_string,
+       detect = str_detect(test_string, "a."),
+       subset = str_subset(test_string, "a."))
+# does not work, as non-matches are obmitted with subset, which, and view
+
+```
+### 15.3.2 Count matches
+`str_count()` is even more compressed and gives the count of matches in the dataframe for each input value.
+```{r}
+# create test vector
+test_string <- c("apple", "banana", "pear")
+
+# in the vector, how many "p"s are in each value
+str_count(test_string, "p")
+
+```
+Regular expressions do not overlap. So once a pattern is counted the strings are not used again
+```{r}
+# so here you get "just" two instead of possible three
+str_count("abababa", "aba")
+
+# show how str "views" the input string
+str_view("abababa", "aba")
+
+```
+`str_count()` fits nicely into the `mutate()` workflow
+```{r}
+# from the babynames dataframe, count the of each value and calculate the vowels and consonants for each
+babynames |> 
+  count(name) |> 
+  mutate(
+    vowels = str_count(name, "[aeiou]"),
+    consonants = str_count(name, "[^aeiou]")
+  )
+```
+Be aware that regex are case sensitive, so Aaban counts only the two "a", but not the "A" with the code above.
+
+```{r}
+# check how str sees is
+str_view("Aaban", "[aeiou]")
+
+```
+You can adress this several ways
+```{r}
+# just add the upper cases manually
+str_view("Aaban", "[aeiouAEIOU]")
+
+# make regex caseignorant
+str_view("Aaban", regex("[aeiou]", ignore_case = TRUE))
+
+# convert input values to lower case
+str_view(str_to_lower("Aaban"), "[aeiou]")
+```
+Let's apply it to the Babynames
+```{r}
+babynames |> 
+  count(name) |> 
+  mutate(
+    name = str_to_lower(name),
+    vowels = str_count(name, "[aeiou]"),
+    consonants = str_count(name, "[^aeiou]")
+  )
+
+# Interesting, not only were the capital Vowels ignored before, but also counted as consonants in the sense, that they were not lower case vowels
+```
+## 15.3.3 Replace values
+Use `str_replace()` and `str_replace_all()` to replace matching strings
+```{r}
+# make x an string vector
+x <-c("apple", "pear", "banana")
+# replace all in x, that are vowels with "-"
+str_replace_all(x, "[aeiou]", "-")
+```
+Use `str_remove()`or `str_remove_all()` as short version of `str_replace(x, [pattern], "")`
+```{r}
+# replace all in x, that are vowels with nothing"
+#long version
+str_replace_all(x, "[aeiou]", "")
+# short version
+# reomve all in x, that are vowels
+str_remove_all(x, "[aeiou]")
+```
+These are also a good pair with `mutate()` for cleaning data.
+
+## 15.3.4 Extract variables
+Use `separate_wider_regex()` to spread one string into new columns
+
+```{r}
+# create dataframe
+df <- tribble(
+  ~str,
+  "<Sheryl>-F_34",
+  "<Kisha>-F_45", 
+  "<Brandon>-N_33",
+  "<Sharon>-F_38", 
+  "<Penny>-F_58",
+  "<Justin>-M_41", 
+  "<Patricia>-F_84", 
+)
+```
+Let's make three columns out of this
+```{r}
+df |>
+  separate_wider_regex(
+  #from column "str
+  str,
+  #extract by following patterns
+  patterns = c(
+    # "<" to nothing, aka skip
+    "<",
+    # to column "name", any number of small an capital letters
+    name = "[A-Za-z]+",
+    # skip ">-"
+    ">-",
+    # to column "gender", any single symbol
+    gender = ".",
+    # skip "_"
+    "_",
+    # to column "age", any number of numbers
+    age = "[0-9]+"
+    )
+  )
+  
+```
+## 15.3.5 Exercises
+### 1.A Name with most vovels
+```{r}
+babynames |>
+  mutate(
+    # convert all letters to lowercase and write into column "vowels"
+    vowels = str_to_lower(name),
+    # count the vowels in each name of column "vowels" and replace it by the count
+    vowels = str_count(vowels, "[aeiou]")
+    ) |>
+  # find the rows with the maximum value of vowels
+  slice_max(vowels) |> 
+# okay now we have 40 first places and the names are doubles because of different years
+# keep only unique names
+distinct(name, .keep_all = TRUE)
+  
+```
+Tighten code
+```{r}
+babynames |> 
+  mutate(vowels = str_count(str_to_lower(name), "[aeiou]")) |> 
+  slice_max(vowels) |> 
+  distinct(name, .keep_all = TRUE)
+```
+### 1.B Highest Proportion of vowels
+```{r}
+babynames |> 
+  mutate(
+    # convert names to lowercase and write in new column
+    vowels = str_to_lower(name),
+    # count number of vowels and overwrite in column
+    vowels = str_count(vowels, "[aeiou]"),
+    # divide number of vowels by total letters in each name and write new column
+    vowel_prop = vowels / str_count(name, "[A-Za-z]")
+  ) |>
+  # filter unique name rows
+  distinct(name, .keep_all = TRUE) |> 
+  # filter rows with maximum vowel_prop value
+  slice_max(vowel_prop)
+```
+tighten code
+```{r}
+# start with distinct to reduce load for all the other processes
+# compress mutate function 
+babynames |> 
+  distinct(name, .keep_all = TRUE) |> 
+  mutate(
+    vowel_prop =
+      str_count(str_to_lower(name), "[aeiou]") /
+      str_count(name, "[A-Za-z]")
+    ) |> 
+  slice_max(vowel_prop)
+```
+### 2. replacing "/" and "\"
+```{r}
+# create test string
+x <- "a/b/c/d/e"
+# replace "/" with "\"
+# use \\ as one \ is seen as escape char
+str_replace_all(x, "/", "\\")
+# now the / have been replaced by nothing
+#lets see
+str_replace_all(x, "/", "\\\\")
+# okay \\ works, but i want a single one
+# use raw string
+str_replace_all(x, "/", r"(\)")
+# same as first function, there must be something with letters and single \
+#lets see
+y <- "a\b\c\d\e"
+#ah yeah, so \ followed by letters expects a combination for special characters
+# lets try it differently
+y <- "a\\b\\c\\d\\e"
+#this escapes the special char thing, but we have double \ again
+y <- r"(a\b\c\d\e)"
+# ahh okay, in the object i can see the double escape, but when printed its fine
+cat(y)
+# so the secind function was fine
+#lets pick it up from there and try to convert back
+z <- str_replace_all(x, "/", "\\\\")
+str_replace_all(z, "\\\\", "/")
+
+```
+### 3. implement `str_replace_all()` to do `str_to_lower()`
+```{r}
+# would be replace all capital letters with lower case
+# make test string
+test <- "AaBbCcDc"
+str_replace_all(test, "[A-Z]", "[a-z]")
+
+# ah yeah that does not work
+# i found the tolower function in r documentation, will try that
+str_replace_all(test, "[A-Z]", tolower)
+
+#got it!
+```
+
+## 15.4 Pattern details
+### 15.4.1 Escaping
+To match a literal `.` you'd need to use `\` so the `.` is recognized as a letter instead of an operator, however to make a `\` you need to escape is aswell.
+
+```{r}
+# to create the RegEx \., use two \\
+dot <- "\\."
+
+# regex will read it now as \. input for it's function
+str_view(dot)
+
+# for example
+str_view(c("abc", "a.c", "bef"), dot)
+
+# so to find a \ you need \\\\
+str_view(c("yo\\yo", "yo.yo", "yo|yo"), "\\\\")
+
+# you can also use raw strings
+str_view(c("yo\\yo", "yo.yo", "yo|yo"), r"{\\}")
+
+# or use a character class
+str_view(c("yo\\yo", "yo.yo", "yo|yo"), "[|]")
+```
+
+### 15.4.2 Anchors
+Anchors let you define the area of interest of strings.
+```{r}
+# use ^ to match only beginning of strings
+# so all words that begin with
+str_view(fruit, "^a")
+
+# use $ to match only end of string
+# so all words that end with
+str_view(fruit, "a$")
+
+
+str_extract(c("lfb1", "lfb12", "lfb123"), "lfb\\d{1}")
+
+
+```
+

@@ -1,0 +1,688 @@
+---
+title: "R for Data Science - 14 Strings "
+output: html_notebook
+---
+
+# 14.1 Prerequisites
+
+```{r}
+library(tidyverse)
+library(babynames)
+```
+
+# 14.2 Creating a string
+
+```{r}
+string1 <- "Double Qoutes work"
+string2 <- 'single qoutes aswell'
+
+string1
+string2
+```
+
+## 14.2.1 Escapes
+
+Use `/` to escape a symbols useage as a input
+
+```{r}
+double_qoute <- "/""
+single_qoute <- '/''
+slash <- "//"
+```
+
+But the print is not as expected
+
+```{r}
+double_qoute
+single_qoute
+slash
+```
+
+Use `str_view()` to see how it would be displayed
+
+```{r}
+str_view(double_qoute)
+str_view(single_qoute)
+str_view(slash)
+```
+
+## 14.2.2 Raw Strings
+
+When too many stuff to escape in a string use *raw string*
+
+```{r}
+tricky <- "double qoute <- /"///"/""
+str_view(tricky)
+
+less_tricky <- r"(double_qoute <- "/"")"
+str_view(less_tricky)
+# only slightly less tricky
+```
+
+## 14.2.3 Other special characters
+
+`/n` for a new line aka. Enter `/t` for a new Tab aka. Tab `/u` or `/U` for Unicode. Check `?Quotes` for doc.
+
+## 14.2.4 Exercises
+
+1.  String with values
+    1.  He said "That's amazing!"
+
+```{r}
+# use raw string to have all the things in one
+he_said <- r"(He said "That's amazing!")"
+str_view(he_said)
+
+# or hawk tua that thang!
+he_shaid <- "He said /"That/'s amazing!/""
+str_view(he_shaid)
+```
+    2.  `/a/b/c/d`
+
+```{r}
+# raw string babieee!
+abcd <- r"(/a/b/c/d)"
+
+# hawk tua
+abct <- "//a//b//c//d"
+
+# use vector to show both in one function
+str_view(c(abcd, abct))
+```
+
+    3.  `///////`
+
+```{r}
+# raw string it is
+slashy <- r"(///////)"
+
+# leaning toothpick syndrome
+slasht <- "//////////////"
+
+str_view(c(slashy, slasht))
+```
+
+2.  Create string in R and print.
+    1.  What happens to `/u00a0`
+
+```{r}
+"/u00a0"
+```
+
+It be empty. So space string?
+
+    2.  How does `str_view()` display it?
+
+```{r}
+
+```
+
+Shows squigly braces, just like for `/t` to show that the empty space is a string/
+
+    3. google this special character It's called a *No-Break Space*. Space and now line brake allowed.
+
+```{r}
+x <- "This/u00a0is/u00a0tricky"
+```
+
+# 14.3 Creating many strings from data
+
+## 14.3.1 `str_c()`
+
+Does the vector right away.
+
+```{r}
+# instead of 
+str_view(c(abcd, x))
+
+# you can do 
+str_c(abcd, x)
+```
+
+Ah a bit different. It combines them instead of run them after another. You can also vector within `str_c`
+
+```{r}
+str_c("Hello ", c("Max", "Ragna", "Erich"))
+```
+
+Recycling, As in running the same argument over all rows of a dataframe works with `str_c()`.
+
+```{r}
+df <- tibble(
+  name = c("Erich", "Ragna", "Max", NA),
+  hype = c(
+    "you look good today",
+    "you are quite the sniffer",
+    "nice face you have",
+    NA
+  )
+)
+
+df |>
+  mutate(greeting = str_c("Hi ", name, ", ", hype, "!"))
+```
+
+Use `coalesce()` to replace missing(NA) values/strings
+
+```{r}
+df |>
+  mutate(
+    greeting1 = str_c("Hi ", coalesce(name, "you"), "!"),
+    greeting2 = coalesce(str_c("Hi ", name, ", ", hype, "!"), "Hey, Hey!")
+  )
+```
+
+## 14.3.2 `str_glue()`
+is better if you do lots of string expressions to spare the `,`s and `"`s
+```{r}
+# instead of
+df |> 
+  mutate(greeting = str_c("Hi ", name, ",", hype, "!"))
+
+# you can do
+df |> 
+  mutate(greeting = str_glue("Hi {name}, {hype}!"))
+
+# does it also work with coalesce?
+df |> 
+  mutate(greeting = coalesce(str_glue("Hi {name}, {hype}!"), "Hey, Hey!"))
+# seemingly not right away 
+```
+## 14.3.3 `str_flatten()`
+takes a vector and gives a single string
+```{r}
+str_flatten(c("a", "b", "c", "d"))
+
+# you can define what goes in between
+str_flatten(c("a", "b", "c", "d"), " and ")
+
+# and how to finish the string
+str_flatten(c("a", "b", "c", "d"), " and ", last = " and also ")
+
+```
+Use it with summarize on str variables
+```{r}
+# create a test df
+df <- tribble(
+  ~ name, ~ fruit, # use the ~ to entry like in a table
+  "Carmen", "banana",
+  "Carmen", "apple",
+  "Marvin", "nectarine",
+  "Terrence", "cantaloupe",
+  "Terrence", "papaya", 
+  "Terrence", "mandarin"
+)
+# fruit is not a numerical vector, so mean, or sum should not work, but n will because it just counts the rows, not their values
+df |> 
+  group_by(name) |> 
+  summarize(fruits = n())
+
+# this is where flatten comes is
+df |> 
+  group_by(name) |> 
+  summarize(fruits = str_flatten(fruit, ", "))
+```
+## 14.3.4 Exercises
+    1. Compare and contrast the results of `paste()` and `paste0()`
+```{r}
+str_c("hi ", NA) # here Hi and NA get become NA
+str_c(letters[1:2], letters[1:3]) # here str_c needs values of same length
+# so this sould work
+str_c(letters[1:3], letters[1:3])
+
+# now how does paste0 deal with it
+paste0("hi ", NA) # it prints NA for NA
+paste0(letters[1:3], letters[1:2]) # it recycles, good to know
+
+```
+    2. What's the difference between `paste()` and `paste0()`? How can you recreate `paste()` with `str_c()`?
+```{r}
+# paste0 does not have a separator by default
+# paste has a space by default
+paste(letters[1:3], "lasagna")
+paste0(letters[1:3], "lasagna")
+
+# recreate space separator with str_c by adding separatur argument
+str_c(letters[1:3], "lasagna", sep = " ")
+str_c(letters[1:3], "lasagna")
+
+```
+    3.   Convert the following expression between `str_c()` and `str_glue()`:
+```{r}
+# a.
+str_c("The price of ", food, " is ", price)
+## is the same as
+str_glue("The price of {food} is {price}")
+
+## okay i make a test df
+df <- tibble(
+  food = c("lasagna"),
+  price = c("almost always worth it")
+)
+## and test
+df |> 
+mutate(answer_strC = str_c("The price of ", food, " is ", price),
+       answer_glue = str_glue("The price of {food} is {price}")
+       )
+
+# b.
+str_glue("I'm {age} years old and live in {country}")
+## is the same as
+str_c("I'm ", age, " years old and live in ", country)
+
+## make test df
+df <- tibble(country = "Germany", age = 3)
+## test
+df |> 
+  mutate(answer_strC = str_c("I'm ", age, " years old and live in ", country),
+         answer_glue = str_glue("I'm {age} years old and live in {country}"))
+
+### ah way to complicated could have just created the objects
+food <- "lasagna"
+price <- "almost always worth it"
+age <- 3
+country <- "Germany"
+
+### and then test directly
+str_c("The price of ", food, " is ", price)
+str_glue("The price of {food} is {price}")
+str_glue("I'm {age} years old and live in {country}")
+str_c("I'm ", age, " years old and live in ", country)
+
+# c.
+str_c("//section{", title, "}")
+## is the same as
+## leaning toothpick syndrome, in glue you print symbols by doubleing them instead of /
+str_glue("////section{{{title}}}")
+
+### create object
+title <- "Three years of worthy german lasagna"
+
+### and test
+str_c("//section{", title, "}")
+str_glue("////section{{{title}}}")
+```
+
+# 14.4 Extracting data from strings
+wider = add columns
+longer = add rows
+
+## Separate longer by delim
+```{r}
+df1 <- tibble(x = c("a, b, c", "d, e", "f"))
+df1 |> 
+  separate_longer_delim(x, delim = ",")
+
+```
+## Separate longer by position
+```{r}
+df2 <- tibble(x = c("1211", "131", "21"))
+df2 |> 
+  separate_longer_position(x, width = 1)
+```
+## Separate wider by delim
+has one step more, where the column names need to be defined.
+Also the raw data needs the same number of "pieces".
+```{r}
+df3 <- tibble(x = c("a10.1.2022", "b10.2.2011", "e15.1.2015"))
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", "edition", "year")
+  )
+
+# change one value and see what happens
+df3 <- tibble(x = c("a10.1.2022.test", "b10.2.2011", "e15.1.2015"))
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", "edition", "year")
+  )
+# try NA to omit the outstanding piece
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", "edition", "year", NA)
+  )
+# NG, can only omit when raw data fits
+## change df back
+df3 <- tibble(x = c("a10.1.2022", "b10.2.2011", "e15.1.2015"))
+# test omit again
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", NA, "year")
+  )
+```
+
+## Separate wider by position
+define column name and width in one argument, smart!
+```{r}
+df4 <- tibble(x = c("202215TX", "202122LA", "203225CA"))
+df4 |> 
+  separate_wider_position(
+    x,
+    widths = c(year = 4, age = 2, state = 2)
+  )
+# omit column by not naming
+df4 |> 
+  separate_wider_position(
+    x,
+    widths = c(year = 4, 2, state = 2)
+  )
+
+```
+## Diagnose widening problems
+now we see how to deal with diverging pieces in the values
+```{r}
+df <- tibble(x = c("1-1-1", "1-1-2", "1-3", "1-3-2", "1"))
+
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z")
+  )
+# you can read in the error message 'too short' and also the solution 'too_few'
+# let's try
+debug <- df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_few = "debug"
+  )
+debug
+# filter the failed rows
+debug |> filter(!x_ok)
+```
+Try fixing the problems in the raw data if possible and then come back to separate. But when NA is fine you can go for `too_few = "align_start"`
+```{r}
+# align_start to keep short pieces at start and NA missing values
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "Z"),
+    too_few = "align_start"
+  )
+# align_end to push short pieces back and NA missing values
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "Z"),
+    too_few = "align_end"
+  )
+
+```
+Try the same thing with "too many" values.
+```{r}
+# create dataframe
+df <- tibble(x = c("1-1-1", "1-1-2", "1-3-5-6", "1-3-2","1-3-5-7-9"))
+# try separate by delimiter
+df |>
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z")
+  )
+# debug
+debug <- df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "debug"
+  )
+# filter buggy rows
+debug |> 
+  filter(!x_ok)
+# either merge, so last column gets overlapping values
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "merge"
+  )
+# or drop
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "drop"
+  )
+# or more columns so that "too few" applies
+
+```
+## 14.5 Letters
+`str_length()` for number of letters in strings
+```{r}
+str_length(c("Ragna", "Popi stinkst!", "Eri dues", NA))
+
+# try with data
+library(babynames)
+babynames |> 
+  count(length = str_length(name), wt = n)
+
+# the wt = n is because for each year the occurences of names are noted, so to get the overall sum for each name use wt = n to sum the counts from all the years 
+babynames |> 
+  filter(str_length(name) == 15) |>
+  count(name, sort = TRUE, , wt = n)
+```
+### 14.5.2 Subsetting
+Use `str_sub()` to extract certrain parts of of strings by position
+```{r}
+# create vector
+x <- c("Ragna", "Erich", "Max", "Tilde")
+# subset first two letters each
+str_sub(x, 1, 2)
+# subset last two letters
+str_sub(x, -2, -1)
+# subset fourth and fifth letter
+str_sub(x, 4, 5)
+
+```
+### 14.5.3 Exercises
+1. Why was `wt = n`used for count of long babynames?
+```{r}
+# take a look at a subset
+# also check description of df
+babynames |> 
+  filter(str_length(name) == 15)
+# n is occurence of each name per year, so right now we have the same names in several rows, because they are split up by year
+# count by default "only" counts number of rows
+# i show you
+babynames |> 
+  filter(name == "Christopherjame")
+# Inital result would be Christopherjame = 16
+babynames |> 
+  count(name == "Christopherjame")
+# in this case we only know that this name was relevant in 16 Years, but not how many humans were actually named like this.
+# here comes wt in as it sums up the values of the defined column
+babynames |> 
+  count(name == "Christopherjame", wt = n)
+# so 108 humans in total got the name 
+## whole game
+babynames |> 
+  # filter only the names that have 15 Letters
+  filter(str_length(name) == 15) |> 
+  # get count of total occurences and sort/arrange
+  count(name, wt = n, sort = TRUE) 
+
+
+```
+2. Extract middle letter from each baby name.
+```{r}
+# add length for each name
+babynames |> 
+  mutate(length = str_length(name)) |> 
+  # gotta divide those by 2 to find the middle letters
+  mutate(middle = length / 2) |> 
+  # add row with middle letter
+  mutate(str_sub(name, middle, middle))
+# now even names just get the first of their middle pair and odd names get the downrounded letter
+# use ceiling to round up
+babynames |> 
+  mutate(middle_n = ceiling(str_length(name) / 2)) |> 
+  mutate(middle_letter = str_sub(name, middle_n, middle_n))
+# what happens if i put end to negative
+babynames |> 
+  mutate(middle_n = ceiling(str_length(name) / 2)) |> 
+  mutate(middle_letter = str_sub(name, middle_n, -middle_n))
+# there we go, got it
+# now compress code
+babynames |>
+  mutate(middle_letter = str_sub(name, ceiling(str_length(name) / 2), -ceiling(str_length(name) / 2)))
+# maybe check if it also works with long names
+babynames |>
+  filter(str_length(name) >= 14) |> 
+  mutate(middle_letter = str_sub(name, ceiling(str_length(name) / 2), -ceiling(str_length(name) / 2)))
+# looks good
+
+```
+3. Trends in Namelength
+```{r}
+# trends in length
+## add length as column
+babynames |> 
+    mutate(length = str_length(name)) |> 
+    #visualize
+    ggplot(aes(length, group = year)) +
+        geom_boxplot()
+# looks bad, how many years are there?
+babynames |> 
+    count(year)
+# 128 not good for boxplots, try point
+babynames |> 
+  mutate(length = str_length(name)) |> 
+  ggplot(aes(year, length)) +
+  geom_point()
+# too much for the interpreter
+# make it compact
+babynames |> 
+  summarize(length = mean(str_length(name)),
+            n = n(),
+            .by = year) |>
+  ggplot(aes(year, length, size = n)) +
+  geom_point() +
+  geom_smooth()
+```
+longest names were in the 90s
+
+Trends in first and last Letters
+```{r}
+# trend in first and last letters
+## add first and last letters als columns
+## keep the n per row in mind for later
+babynames |> 
+  mutate(
+    fl = str_sub(name, 1, 1),
+    ll = str_sub(name, -1, -1)
+  )
+# don't knot how to handle both at the same time just use one
+babynames |> 
+  mutate(fl = str_sub(name, 1, 1)) |> 
+  group_by(fl, year) |> 
+  count(wt = n) |> 
+  group_by(year) |> 
+  slice_max(n = 1, order_by = n)
+# now we know the most common first letter for each year, but no real trend or first and last letters
+```
+I would like to have a ranking for each letter and then check the average top three or so.
+```{r}
+# try first letter only first
+babynames |> 
+  mutate(fl = str_sub(name, 1, 1)) |> 
+  group_by(year, fl) |> 
+  count(wt = n) |>
+  group_by(year) |> 
+  slice_max(n = 3, order_by = n) |> 
+  ggplot(aes(year, n, color = fl)) +
+  geom_point()
+
+#  compact code
+babynames |> 
+  mutate(fl = str_sub(name, 1,1)) |> 
+  count(year, fl, wt = n) |>
+  #filter(year >= 1980) |> 
+  slice_max(n = 3, by = year, order_by = n) |> 
+  ggplot(aes(year, n)) +
+  geom_point(aes(color = fl)) +
+  geom_smooth()
+
+# counts overall
+babynames |>
+  #filter(year >= 1990) |> 
+  group_by(year) |> 
+  count(wt = n) |> 
+  ggplot(aes(year, n)) +
+  geom_point() +
+  geom_smooth()
+
+# and the same for the last letter
+babynames |> 
+  mutate(fl = str_sub(name, -1,-1)) |> 
+  count(year, fl, wt = n) |>
+  #filter(year >= 1980) |> 
+  slice_max(n = 3, by = year, order_by = n) |> 
+  ggplot(aes(year, n)) +
+  geom_point(aes(color = fl)) +
+  geom_smooth()
+```
+
+Try better
+```{r}
+# test some stuff
+# add rank for some value
+df <- tibble(x = c(1:15),
+             y = C(2:16))
+df |> mutate(rank = min_rank(desc(x)))
+
+# okay add columns with weighted counts for first and last letter
+babynames |> 
+  mutate(fl = str_sub(name, 1, 1),
+         ll = str_sub(name, -1, -1)
+  ) |> 
+  add_count(year, fl, wt = n, name = "fln") |> 
+  add_count(year, ll, wt = n, name = "lln") |> 
+  # add rank for first and last letter
+  mutate(.by = year,
+         frank = min_rank(desc(fln)),
+         lrank = min_rank(desc(lln)),
+         ) |> 
+  # check the ranking
+  summarise(mean(lrank))
+# looks off there are only 26 letters, so how 8k ranks?
+# test again with one letter
+babynames |> 
+  mutate(fl = str_sub(name, 1,1)) |> 
+  add_count(year, fl, wt = n, name = "fln") |> 
+  group_by(year, fl) |> 
+  mutate(min_rank(fln))
+## this aint right, but i'm two hours in. Let's leave it with the sinple ggplot
+```
+
+## 14.6.3 Non-English text
+See how strings are encoded for computing
+```{r}
+charToRaw("Bernd Erich")
+```
+UTF-8 is the encoding standard, which is supported with a lot of languages and also emojis.
+If text was encoded in an older system, find and call the original system and also locale to convert from.
+```{r}
+
+x2 <- "text\n\x82\xb1\x82\xf1\x82\xc9\x82\xbf\x82\xcd"
+
+x1 <- "text\nEl Ni\xf1o was particularly bad this year"
+read_csv(x1, delim = \\)$text
+
+
+```
+

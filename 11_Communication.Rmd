@@ -1,0 +1,472 @@
+---
+title: "R4DS Chapter 11 - Communication"
+output: html_notebook
+---
+
+# 11.1 Introduction
+
+> In the course of most analyses, you'll produce tens or hundreds of plots, most of which are immediately thrown away.
+
+> To help others quickly build up a good mental model of the data, you will need to invest considerable effort in making your plots as self-explanatory as possible.
+
+```{r}
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(patchwork)
+```
+
+## 11.2 Labels
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    x = "Engine displacement (L)",
+    y = "Highway fuel economy (mpg)", 
+    color = "Car type",
+    title = "Fuel efficiency generally decreases with engine size",
+    subtitle = "Two seaters (sports cars) are an exeption because of the light weight",
+    caption = "Data from fuel economy.gov"
+      )
+```
+
+The purpose of a plot title is to summarize the main finding. Avoid titles that just describe what the plot is, e.g., "A scatterplot of engine displacement vs. fuel economy".
+
+## 11.2.1 Exercises
+1.  Create one plot on the fuel economy data with customized `title`, `subtitle`, `caption`, `x`, `y`, and `color` labels.
+
+```{r}
+ggplot(mpg, aes(hwy, cty)) +
+  geom_point(aes(color = class)) +
+  geom_smooth() +
+  labs(
+    x = "Highway fuel economy",
+    y = "City fuel economy",
+    color = "Car Type",
+    title = "city and highway fuel efficiency relate linear overall",
+    subtitle = "Midsized and Pickup Cars fare better in city traffic",
+    caption = "Data from fueleconomy.gov"
+  )
+```
+
+2.  Recreate the following plot using the fuel economy data. Note that both the colors and shapes of points vary by the type of drive train.
+
+```{r}
+ggplot(mpg, aes(cty, hwy, shape = drv, color = drv)) +
+  geom_point() +
+  labs(
+    x = "City MPG",
+    y = "Highway MPG",
+    color = "Type of drive train",
+    shape = "Type of drive train"
+  )
+```
+
+3.  Take an exploratory graphic that you've created in the last month, and add informative titles to make it easier for other to understand.
+
+```{r}
+diamonds |>
+  group_by(cut) |>
+  mutate(n = n()) |>
+  ggplot(aes(fct_reorder(cut,
+                         carat,
+                         median),
+             price,
+             color = cut)) +
+  geom_boxplot(varwidth = TRUE,
+               show.legend = FALSE) +
+  labs(
+    x = "Quality of cut, ordered in ascending average size",
+    y = "Total selling price",
+    title = "Diamonds of fair quality have the highest average price",
+    subtitle = "they are also the biggest on average",
+    caption = "data from somewhere"
+  )
+```
+
+# 11.3 Annotations
+
+-   Reference lines with `geom_hline()` and `geom_vline()`
+
+-   Rectangles for points of interest with `geom_rect()`
+
+    -   or package ggforce, `geom_mark_hull()` for subsets of groups
+
+-   `geom_segment()` + `arrow` for arrows to points
+
+-   `annotate()` for single/few annotations
+
+> Annotation is a powerful tool for communicating main takeaways and interesting features of your visualizations. The only limit is your imagination (and your patience with positioning annotations to be aesthetically pleasing)!
+
+## 11.3.1 Exercises
+
+1.  Use `geom_text()` with infinite positions to place text at the four corners of the plot.
+
+Create a `tribble`/ Dataframe for the Cornerpoints to be overlaid.
+
+```{r}
+corners <- tribble(
+  ~ label, ~x, ~y,
+  "top left", -Inf, Inf,
+  "top right", Inf, Inf,
+  "bottom left", -Inf, -Inf,
+  "bottom right", Inf, -Inf
+)
+```
+
+Create a plot and add the Dataframe as layer with `geom_text()` . You have to set aesthetics separate for the text layer. Avoid grouping arguments like `color = class` in the top level. Call them in their respective geoms
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_text(data = corners,
+            aes(x, y, label = label))
+```
+
+Labels are center position by default. Try `hjust` and `vjust` arguments.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_text(
+    data = corners,
+    aes(
+      x,
+      y,
+      label = label,
+      hjust = "left",
+      vjust = "bottom")
+  )
+```
+
+Works only for a single corner. Add individual justification to tribble.
+
+```{r}
+corners <- tribble(
+  ~label, ~x, ~y, ~hjust, ~vjust,
+  "top left", -Inf, Inf, "bottom", "right",
+  "top right", Inf, Inf, "top", "right",
+  "bottom left", -Inf, -Inf, "bottom", "left",
+  "bottom right", Inf, -Inf, "top", "left",
+)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_text(
+    data = corners,
+    aes(
+      x,
+      y,
+      label = label,
+      hjust = hjust,
+      vjust = vjust)
+    
+  )
+```
+
+Values instead of strings for vjust, to fully show the bottom right "g".
+
+Leave `hjust` as string, to not have to adjust for differences in text length.
+
+```{r}
+corners <- tribble(
+  ~label, ~x, ~y, ~hjust, ~vjust,
+  "top left", -Inf, Inf, "left", 1,
+  "top right", Inf, Inf, "right", 1,
+  "bottom left", -Inf, -Inf, "left", -.25,
+  "bottom right", Inf, -Inf, "right", -.25,
+)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_text(
+    data = corners,
+    aes(
+      x,
+      y,
+      label = label,
+      hjust = hjust,
+      vjust = vjust)
+    
+  )
+```
+# 11.4 Scales----
+## Load librarys----
+```{r}
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(patchwork)
+```
+
+## 11.4.1 Default scales----
+```{r}
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class))
+
+# the same as
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class)) +
+  scale_x_continuous() +
+  scale_y_continuous() +
+  scale_color_discrete()
+```
+
+
+#>collectively axes and legends are called
+#>**guides**
+```{r}
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point() +
+  scale_y_continuous(breaks = seq(15, 40, by = 5))
+
+```
+
+## 11.4.3 Legend layout----
+```{r}
+base <- ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class))
+
+base + theme(legend.position = "right")
+base + theme(legend.position = "left")
+base +
+  theme(legend.position = "top") +
+  guides(color = guide_legend(nrow = 3))
+base + 
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(nrow = 3))
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(nrow = 2, override.aes = list(size = 4)))
+```
+
+# 11.4.4 Replacing a scale ------------------------------------------------
+```{r}
+
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_bin2d()
+
+ggplot(diamonds, aes(x = log10(carat), y = log10(price))) +
+  geom_bin2d()
+
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_bin_2d() +
+  scale_x_log10() +
+  scale_y_log10()
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv))
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  scale_color_brewer(palette = "Set1")
+
+presidential |> 
+  mutate(id = 33 + row_number()) |> 
+  ggplot(aes(x = start, y = id, color = party)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id), linewidth = 1) +
+  scale_color_manual(values = c(Republican = "#E81B23", Democratic = "#00AEF3"))
+
+df <- tibble(
+  x = rnorm(10000),
+  y = rnorm(10000)
+)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() +
+  labs(title = "Default, continuous", x = NULL, y = NULL)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() +
+  scale_fill_viridis_c() +
+  labs(title = "Viridis, continuous", x = NULL, y = NULL)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() +
+  scale_fill_viridis_b() +
+  labs(title = "Viridis, binned", x = NULL, y = NULL)
+```
+
+
+# 11.4.6 Exercises
+1. Why doesn't the following code override the default scale?
+`geom_hex`uses fill instead of color
+```{r}
+df <- tibble(
+  x = rnorm(10000),
+  y = rnorm(10000)
+)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  scale_fill_gradient(low = "white", high = "red") +
+  coord_fixed()
+```
+2. What is the first argument to every scale? How does it compare to `labs()`?
+The first argument of the scale_ prompts is name, as opposed to title for the `lab()`prompt. Because for each object exists a singular scale prompt the first argument can be the name, whereas with `labs()` each argument considers another object.
+3. Change the display of the presidential terms by:
+  a. combining the two variants that customize colors and x axis breaks
+```{r}
+presidential |> 
+  mutate(id = 33 + row_number()) |> 
+  ggplot(aes(x = start, y = id, color = party)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_color_manual(values = c(Republican = "#E81b23", Democratic = "#00Aef3")) +
+  scale_x_date(name = NULL, date_labels = "'%y", breaks = presidential$start)
+```
+  
+  b. improving the display of the y axis
+```{r}
+presidential |> 
+  mutate(id = 33 + row_number()) |> 
+  ggplot(aes(x = start, y = id, color = party)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_color_manual(values = c(Republican = "#E81b23", Democratic = "#00Aef3")) +
+  scale_x_date(name = NULL, date_labels = "'%y", breaks = presidential$start) +
+  scale_y_continuous(
+    name = NULL,
+    breaks = seq(33, 45, by = 1)
+  )
+```
+  
+  c. labelling each term with the name of the president
+```{r}
+presidential |> 
+  mutate(id = 33 + row_number()) |> 
+  ggplot(aes(x = start, y = id, color = party)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_color_manual(values = c(Republican = "#E81b23", Democratic = "#00Aef3")) +
+  scale_x_date(name = NULL, date_labels = "'%y", breaks = presidential$start) +
+  scale_y_continuous(name = NULL, breaks = seq(33, 45, by = 1)) +
+  geom_text(
+    aes(label = name),
+    hjust = "left",
+    vjust = "bottom",
+    fontface = "bold",
+    nudge_y = .1)
+```
+  
+  d. adding informative plot labels [todo]
+```{r}
+presidential |>
+  mutate(id = 33 + row_number()) |>
+  ggplot(aes(x = start, y = id, color = party)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_color_manual(values = c(
+    Republican = "#E81b23",
+    Democratic = "#00Aef3"
+  )) +
+  scale_x_date(name = NULL,
+               date_labels = "'%y",
+               breaks = presidential$start) +
+  scale_y_continuous(name = NULL, breaks = seq(33, 45, by = 1)) +
+  geom_text(
+    aes(label = name),
+    hjust = "left",
+    vjust = "bottom",
+    fontface = "bold",
+    nudge_y = .1
+  ) +
+  labs(
+    title = "both major parties mostly take turns on the presidential office",
+    label = "Test"
+    
+  )
+```
+  
+  e. placing breaks every 4 years (this is trickier than it seems!).
+
+4. First create the follwing plot. Then, modify the code using `override.aes`to make the legend easier to see.
+```{r}
+# guides is the control for individual legends
+# guide_legend for categorical, guide_colorbar for continuous
+# override.aes to free legend from plot aesthetics
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point(aes(color = cut), alpha = 1/20) +
+  guides(color = guide_legend(override.aes = list(size = 4, alpha = 1)))
+```
+## 11.5 Themes
+`theme()`to control all non-data aesthetics. Has it's own lingo. Good for individual tweaks, or even prepared themes for corporate Identitiy.
+### 11.5.1 Exercises
+1. Pick a theme offered by the ggthemes package and apply it to the last plot you made.
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point(aes(color = cut), alpha = 1/20) +
+  theme_solarized_2() +
+  guides(color = guide_legend(override.aes  = list(size = 4, alpha = 1)))
+  # place this after theme to adjust alpha, doesn't work before theme_*()
+```
+2. Make the axis labels of your plot blue and bolded.
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point(aes(color = cut), alpha = 1/20) +
+  theme_solarized_2()+
+  theme(
+    axis.title.x = element_text(face = "bold", color = "blue"),
+    axis.title.y = element_text(face = "bold", color = "blue")
+  ) + # has to be after theme_*() to work, e.g. the arguments don't work within theme_*()
+  guides(color = guide_legend(override.aes  = list(size = 4, alpha = 1)))
+  # place this after theme to adjust alpha, doesn't work before theme_*()
+```
+## 11.6 Layout
+Patchwork Package to place different plots to each other. Have to save them as objects first though.
+`|`to place sideways
+`/`to place in new row
+Can create legend and elements shared by all plots.
+### 11.6.1 Exercises
+1. What happens if you omit the parentheses in the following plot layout. Can you explain why this happens?
+```{r}
+p1 <- ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 1")
+p2 <- ggplot(mpg, aes(x = drv, y = hwy)) + 
+  geom_boxplot() + 
+  labs(title = "Plot 2")
+p3 <- ggplot(mpg, aes(x = cty, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 3")
+
+# parentheses treat as one line
+(p1 / p2) | p3
+
+# without no difference
+p1 / p2 | p3
+
+# so variators bunch them together by default
+p1 + p2 / p3
+
+# + makes best assumption
+p1 / p2 + p3
+```
+2. Using the three plots from the previous exercise, recreate the following patchwork.
+- plot 1 on top row
+- plot 2 and 3 next to each other below
+```{r}
+p1 / (p2 | p3) #missing the Fig.A: Title
+
+# add tags to plots
+p1 / (p2 | p3) +
+  plot_annotation(tag_levels = "A")
+
+# add pre- and suffix
+p1 / (p2 | p3) +
+  plot_annotation(
+    tag_prefix = "Fig.",
+    tag_levels = "A",
+    tag_suffix = ":"
+  )
+```
+
