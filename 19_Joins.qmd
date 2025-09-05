@@ -418,7 +418,7 @@ This is good for debugging, which in this case would be to find those rows that 
 
 ### 19.3.4 Exercises
 
-# 1
+#### 1
 > Find the 48 hours (over the course of the whole year) that have the worst delays. Cross-reference it with the `weather`data. Can you see any patterns?
 
 ```{r}
@@ -708,3 +708,169 @@ There were severe storms starting in Atlanta going south-east.
 [This is the report I found](https://stormwatchamerica.wordpress.com/2013/06/13/developing-severe-storms-likely-thursday-in-metro-atlanta-all-of-n-c-ga-gawx/)
 
 After closer inspection, there is also a spot wit a lot of delay in boston, so I also checked that and found [another news report](https://eu.usatoday.com/story/todayinthesky/2013/06/13/severe-storms-snarl-flights-across-the-east/2418761/) showing the extent of the storm.
+
+## 19.4 How do joins Work?
+
+Make tibbles to explore the join functions with:
+```{r}
+x <-
+  tribble(
+    ~key, ~val_x,
+    1, "x1",
+    2, "x2", 
+    3, "x3"
+  )
+y <- 
+  tribble(
+    ~key, ~val_y,
+    1, "y1",
+    2, "y2",
+    4, "y3"
+  )
+
+x
+y
+```
+An `inner_join()`retains only those rows that have a match:
+```{r}
+x |>
+  inner_join(y,
+             # spelling this so only results are put out
+             # that's the way to do it in production
+             join_by(key))
+```
+
+The other ways of joining, can be grouped as *outer joins*:
+
+A `left_join()` keeps all rows of x and adds `NA` for the values of rows that did not match a row in y:
+```{r}
+x |> 
+  left_join(y,
+            join_by(key))
+```
+
+A `right_join()` mirrors the left join, so it keeps all rows of y and adds `NA`for the values of rows that did not match a row in x: 
+```{r}
+x |> 
+  right_join(y,
+             join_by(key))
+```
+
+A `full_join()` will keep all rows of both x and y, while it will add `NA` for all the rows that did not match:
+```{r}
+x |> 
+  full_join(y,
+            join_by(key))
+```
+
+*Inner Join* and *outer joins* together can further be grouped as *equi joins*, as they all match rows, when the keys are *equal* (of same value). This is to oppose them to *non-equi joins*, which will be explained later on.
+
+### 19.4.1 Row matching
+
+Make dataframes to explore multiple rows matching the same key:
+```{r}
+df1 <- 
+  tibble(
+    key = c(1, 2, 2),
+    val_x = c("x1", "x2", "x3"))
+
+df2 <-
+  tibble(
+    key = c(1, 2, 2),
+    val_y = c("y1", "y2", "y3")
+  )
+
+df1
+df2
+```
+
+Let's match 'em and see what happens:
+```{r}
+df1 |> 
+  inner_join(df2,
+             join_by(key))
+```
+
+So all combinations of matching rows(keys) are kept in the new dataframe.
+If this is actually what you want, silence the warning with the `relationship` argument:
+```{r}
+df1 |> 
+  inner_join(df2,
+             join_by(key),
+             relationship = "many-to-many")
+```
+
+### 19.4.2 Filtering joins
+
+Be aware that the output of filtering joins don't reflect rows with multiple matches. So a `semi_join()` keeps all rows that have one or more matches just once, while `anti_join()` only keeps those rows that have no match at all.
+
+```{r}
+df1 |> 
+  semi_join(df2,
+            join_by(key))
+
+df1 |> anti_join(df2,
+                 join_by(key))
+```
+
+## 19.5 Non-equi joins
+
+Non-equi joins match rows, where the key of x matches the key of y under conditions you define. dbplyr defines four of those:
+
+- *Cross joins*
+  - match every pair of rows
+- *Inequality joins*
+  - use `<`, `<=`, `>` and `>=` instead of `==`
+- *Rolling joins*
+  - are similar to equality joins but only find the closest match
+- *Overlap joins*
+  - are special type of inequality join designed to work with ranges
+
+### 19.5.1 Cross joins
+
+```{r}
+# get some names to test with
+names <-
+  tibble(name = sample(babynames::babynames$name, 4))
+
+names
+
+names |> 
+  cross_join(names)
+```
+
+### 19.5.2 Inequality joins
+
+```{r}
+# add id column
+names_id <- 
+  names |> 
+    mutate(id = row_number())
+
+# Now we just get all combinations, without the same name double
+names_id |> 
+  inner_join(names_id,
+             join_by(id < id))
+```
+### 19.5.3 Rolling joins
+Task:
+Find the a date for a party, where most people have birthday
+
+```{r}
+# set seed to get the sames names every time
+set.seed(123)
+
+# create some identities
+people <- 
+  tibble(
+    name = sample(babynames::babynames$name, 100),
+    birthday = ymd("2025-01-01") + (sample(365, 100, replace = TRUE))
+  )
+
+people
+```
+
+Ah yeah actually the chapter of the book does it pretty good and I'd rather move on. Will do the Exercises though:
+
+### 19.5.5 Exercises
+
